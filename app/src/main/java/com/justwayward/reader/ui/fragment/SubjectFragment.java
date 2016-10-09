@@ -8,6 +8,7 @@ import com.justwayward.reader.bean.BookLists;
 import com.justwayward.reader.bean.support.TagEvent;
 import com.justwayward.reader.component.AppComponent;
 import com.justwayward.reader.component.DaggerFindComponent;
+import com.justwayward.reader.manager.SettingManager;
 import com.justwayward.reader.ui.activity.SubjectBookListDetailActivity;
 import com.justwayward.reader.ui.contract.SubjectFragmentContract;
 import com.justwayward.reader.ui.easyadapter.SubjectBookListAdapter;
@@ -110,30 +111,29 @@ public class SubjectFragment extends BaseRVFragment<SubjectFragmentPresenter, Bo
     public void initCategoryList(TagEvent event) {
         currendTag = event.tag;
         if (getUserVisibleHint()) {
-            mPresenter.getBookLists(duration, sort, 0, limit, currendTag, "male");
+            mPresenter.getBookLists(duration, sort, 0, limit, currendTag, SettingManager.getInstance().getUserChooseSex());
         }
     }
 
     @Override
     public void onDestroyView() {
         EventBus.getDefault().unregister(this);
-        mPresenter.detachView();
         super.onDestroyView();
     }
 
     @Override
     public void onItemClick(int position) {
-        SubjectBookListDetailActivity.startActivity(activity, mAdapter.getItem(position)._id);
+        SubjectBookListDetailActivity.startActivity(activity, mAdapter.getItem(position));
     }
 
     @Override
     public void onRefresh() {
         super.onRefresh();
-        mPresenter.getBookLists(duration, sort, 0, limit, currendTag, "male");
+        mPresenter.getBookLists(duration, sort, 0, limit, currendTag, SettingManager.getInstance().getUserChooseSex());
     }
 
     @Override
     public void onLoadMore() {
-        mPresenter.getBookLists(duration, sort, start, limit, currendTag, "male");
+        mPresenter.getBookLists(duration, sort, start, limit, currendTag, SettingManager.getInstance().getUserChooseSex());
     }
 }

@@ -422,7 +422,8 @@ public class EasyRecyclerView extends FrameLayout {
         mRecycler.setVisibility(View.VISIBLE);
     }
 
-    public void showTipView(String tip) {
+    public void showTipViewAndDelayClose(String tip) {
+        tipView.setText(tip);
         Animation mShowAction = new TranslateAnimation(Animation.RELATIVE_TO_SELF, 0.0f,
                 Animation.RELATIVE_TO_SELF, 0.0f, Animation.RELATIVE_TO_SELF,
                 -1.0f, Animation.RELATIVE_TO_SELF, 0.0f);
@@ -444,6 +445,42 @@ public class EasyRecyclerView extends FrameLayout {
         }, 2200);
     }
 
+    public void showTipView(String tip) {
+        tipView.setText(tip);
+        Animation mShowAction = new TranslateAnimation(Animation.RELATIVE_TO_SELF, 0.0f,
+                Animation.RELATIVE_TO_SELF, 0.0f, Animation.RELATIVE_TO_SELF,
+                -1.0f, Animation.RELATIVE_TO_SELF, 0.0f);
+        mShowAction.setDuration(500);
+        tipView.startAnimation(mShowAction);
+        tipView.setVisibility(View.VISIBLE);
+    }
+
+    public void hideTipView(long delayMillis) {
+        tipView.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                Animation mHiddenAction = new TranslateAnimation(Animation.RELATIVE_TO_SELF,
+                        0.0f, Animation.RELATIVE_TO_SELF, 0.0f,
+                        Animation.RELATIVE_TO_SELF, 0.0f, Animation.RELATIVE_TO_SELF,
+                        -1.0f);
+                mHiddenAction.setDuration(500);
+                tipView.startAnimation(mHiddenAction);
+                tipView.setVisibility(View.GONE);
+            }
+        }, delayMillis);
+    }
+
+    public void setTipViewText(String tip) {
+        if (!isTipViewVisible())
+            showTipView(tip);
+        else
+            tipView.setText(tip);
+    }
+
+    public boolean isTipViewVisible() {
+        return tipView.getVisibility() == View.VISIBLE;
+    }
+
 
     /**
      * Set the listener when refresh is triggered and enable the SwipeRefreshLayout
@@ -460,6 +497,9 @@ public class EasyRecyclerView extends FrameLayout {
         mPtrLayout.post(new Runnable() {
             @Override
             public void run() {
+                if (isRefreshing) { // 避免刷新的loadding和progressview 同时显示
+                    mProgressView.setVisibility(View.GONE);
+                }
                 mPtrLayout.setRefreshing(isRefreshing);
             }
         });

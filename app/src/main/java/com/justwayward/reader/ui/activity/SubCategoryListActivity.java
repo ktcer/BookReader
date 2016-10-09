@@ -210,6 +210,7 @@ public class SubCategoryListActivity extends BaseActivity implements SubCategory
                 mListPopupWindow.setWidth(ViewGroup.LayoutParams.MATCH_PARENT);
                 mListPopupWindow.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
                 mListPopupWindow.setAnchorView(mCommonToolbar);
+                mListPopupWindow.setModal(true);
                 mListPopupWindow.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                     @Override
                     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
@@ -220,16 +221,14 @@ public class SubCategoryListActivity extends BaseActivity implements SubCategory
                             currentMinor = "";
                         }
                         int current = mViewPager.getCurrentItem();
-                        EventBus.getDefault().post(new SubEvent(mMinors.get(position), types[current]));
+                        EventBus.getDefault().post(new SubEvent(currentMinor, types[current]));
                         mListPopupWindow.dismiss();
                         mCommonToolbar.setTitle(mMinors.get(position));
-
                     }
                 });
             }
             mListPopupWindow.show();
         }
     }
-
 
 }

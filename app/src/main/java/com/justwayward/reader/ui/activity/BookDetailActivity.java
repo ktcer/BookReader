@@ -2,6 +2,8 @@ package com.justwayward.reader.ui.activity;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
@@ -14,24 +16,31 @@ import com.justwayward.reader.R;
 import com.justwayward.reader.base.BaseActivity;
 import com.justwayward.reader.base.Constant;
 import com.justwayward.reader.bean.BookDetail;
+import com.justwayward.reader.bean.BookLists;
 import com.justwayward.reader.bean.HotReview;
 import com.justwayward.reader.bean.Recommend;
 import com.justwayward.reader.bean.RecommendBookList;
+import com.justwayward.reader.bean.support.RefreshCollectionIconEvent;
+import com.justwayward.reader.bean.support.RefreshCollectionListEvent;
 import com.justwayward.reader.common.OnRvItemClickListener;
 import com.justwayward.reader.component.AppComponent;
 import com.justwayward.reader.component.DaggerBookComponent;
+import com.justwayward.reader.manager.CollectionsManager;
 import com.justwayward.reader.ui.adapter.HotReviewAdapter;
 import com.justwayward.reader.ui.adapter.RecommendBookListAdapter;
 import com.justwayward.reader.ui.contract.BookDetailContract;
 import com.justwayward.reader.ui.presenter.BookDetailPresenter;
-import com.justwayward.reader.utils.ACache;
 import com.justwayward.reader.utils.FormatUtils;
+import com.justwayward.reader.utils.ToastUtils;
 import com.justwayward.reader.view.DrawableCenterButton;
 import com.justwayward.reader.view.TagColor;
 import com.justwayward.reader.view.TagGroup;
 import com.yuyh.easyadapter.glide.GlideRoundTransform;
 
-import java.io.Serializable;
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -119,7 +128,6 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
     protected void setupActivityComponent(AppComponent appComponent) {
         DaggerBookComponent.builder()
                 .appComponent(appComponent)
-                //.mainActivityModule(new MainActivityModule(this))
                 .build()
                 .inject(this);
     }
@@ -133,6 +141,7 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
     @Override
     public void initDatas() {
         bookId = getIntent().getStringExtra(INTENT_BOOK_ID);
+        EventBus.getDefault().register(this);
     }
 
     @Override
@@ -144,8 +153,7 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
 
         mRvRecommendBoookList.setHasFixedSize(true);
         mRvRecommendBoookList.setLayoutManager(new LinearLayoutManager(this));
-        mRecommendBookListAdapter = new RecommendBookListAdapter(mContext, mRecommendBookList,
-                this);
+        mRecommendBookListAdapter = new RecommendBookListAdapter(mContext, mRecommendBookList, this);
         mRvRecommendBoookList.setAdapter(mRecommendBookListAdapter);
 
         mTagGroup.setOnTagClickListener(new TagGroup.OnTagClickListener() {
@@ -164,8 +172,11 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
 
     @Override
     public void showBookDetail(BookDetail data) {
-        Glide.with(mContext).load(Constant.IMG_BASE_URL + data.cover).placeholder(R.drawable
-                .cover_default).transform(new GlideRoundTransform(mContext)).into(mIvBookCover);
+        Glide.with(mContext)
+                .load(Constant.IMG_BASE_URL + data.cover)
+                .placeholder(R.drawable.cover_default)
+                .transform(new GlideRoundTransform(mContext))
+                .into(mIvBookCover);
 
         mTvBookTitle.setText(data.title);
         mTvAuthor.setText(String.format(getString(R.string.book_detail_author), data.author));
@@ -183,28 +194,31 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
 
         mTvlongIntro.setText(data.longIntro);
         mTvCommunity.setText(String.format(getString(R.string.book_detail_community), data.title));
-        mTvPostCount.setText(String.format(getString(R.string.book_detail_post_count), data
-                .postCount));
+        mTvPostCount.setText(String.format(getString(R.string.book_detail_post_count), data.postCount));
 
-
-        Recommend recommend = new Recommend();
-        recommendBooks = recommend.new RecommendBooks();
-
+        recommendBooks = new Recommend.RecommendBooks();
         recommendBooks.title = data.title;
         recommendBooks._id = data._id;
         recommendBooks.cover = data.cover;
         recommendBooks.lastChapter = data.lastChapter;
 
-        List<Recommend.RecommendBooks> list = (ArrayList<Recommend.RecommendBooks>) ACache.get(this).getAsObject("collection");
-        for (Recommend.RecommendBooks bean :
-                list) {
-            if (bean._id.equals(recommendBooks._id)) {
-                mBtnJoinCollection.setText(R.string.book_detail_remove_collection);
-                mBtnJoinCollection.setBackgroundDrawable(getResources().getDrawable(R.drawable.btn_join_collection_pressed));
-                isJoinedCollections=true;
-                break;
-            }
+        refreshCollectionIcon();
+    }
+
+    /**
+     * 刷新收藏图标
+     */
+    private void refreshCollectionIcon() {
+        if (CollectionsManager.getInstance().isCollected(recommendBooks._id)) {
+            initCollection(false);
+        } else {
+            initCollection(true);
         }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void RefreshCollectionIcon(RefreshCollectionIconEvent event) {
+        refreshCollectionIcon();
     }
 
     /**
@@ -252,41 +266,63 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
         if (data instanceof HotReview.Reviews) {
             BookDiscussionDetailActivity.startActivity(this, ((HotReview.Reviews) data)._id);
         } else if (data instanceof RecommendBookList.RecommendBook) {
-            String id = ((RecommendBookList.RecommendBook) data).id;
-            SubjectBookListDetailActivity.startActivity(this, id);
+            RecommendBookList.RecommendBook recommendBook = (RecommendBookList.RecommendBook) data;
+
+            BookLists bookLists = new BookLists();
+            BookLists.BookListsBean bookListsBean = bookLists.new BookListsBean();
+            bookListsBean._id = recommendBook.id;
+            bookListsBean.author = recommendBook.author;
+            bookListsBean.bookCount = recommendBook.bookCount;
+            bookListsBean.collectorCount = recommendBook.collectorCount;
+            bookListsBean.cover = recommendBook.cover;
+            bookListsBean.desc = recommendBook.desc;
+            bookListsBean.title = recommendBook.title;
+
+            SubjectBookListDetailActivity.startActivity(this, bookListsBean);
         }
     }
 
     @OnClick(R.id.btnJoinCollection)
     public void onClickJoinCollection() {
-        List<Recommend.RecommendBooks> list = (ArrayList<Recommend.RecommendBooks>) ACache.get(this).getAsObject("collection");
-        if (list == null) {
-            list = new ArrayList<>();
-        }
-
         if (!isJoinedCollections) {
-            list.add(recommendBooks);
-            mBtnJoinCollection.setText(R.string.book_detail_remove_collection);
-            mBtnJoinCollection.setBackgroundDrawable(getResources().getDrawable(R.drawable.btn_join_collection_pressed));
-        } else {
-            for (Recommend.RecommendBooks bean :
-                    list) {
-                if (bean._id.equals(recommendBooks._id)) {
-                    list.remove(bean);
-                    break;
-                }
+            if (recommendBooks != null) {
+                CollectionsManager.getInstance().add(recommendBooks);
+                ToastUtils.showToast(String.format(getString(
+                        R.string.book_detail_has_joined_the_book_shelf), recommendBooks.title));
+                initCollection(false);
             }
-            mBtnJoinCollection.setText(R.string.book_detail_join_collection);
-            mBtnJoinCollection.setBackgroundDrawable(getResources().getDrawable(R.drawable.shape_common_btn_solid_normal));
+        } else {
+            CollectionsManager.getInstance().remove(recommendBooks._id);
+            ToastUtils.showToast(String.format(getString(
+                    R.string.book_detail_has_remove_the_book_shelf), recommendBooks.title));
+            initCollection(true);
         }
-        isJoinedCollections=!isJoinedCollections;
-        ACache.get(this).put("collection", (Serializable) list);
+        EventBus.getDefault().post(new RefreshCollectionListEvent());
+    }
+
+    private void initCollection(boolean coll) {
+        if (coll) {
+            mBtnJoinCollection.setText(R.string.book_detail_join_collection);
+            Drawable drawable = ContextCompat.getDrawable(this, R.drawable.book_detail_info_add_img);
+            drawable.setBounds(0, 0, drawable.getMinimumWidth(), drawable.getMinimumHeight());
+            mBtnJoinCollection.setBackgroundDrawable(ContextCompat.getDrawable(this, R.drawable.shape_common_btn_solid_normal));
+            mBtnJoinCollection.setCompoundDrawables(drawable, null, null, null);
+            mBtnJoinCollection.postInvalidate();
+            isJoinedCollections = false;
+        } else {
+            mBtnJoinCollection.setText(R.string.book_detail_remove_collection);
+            Drawable drawable = ContextCompat.getDrawable(this, R.drawable.book_detail_info_del_img);
+            drawable.setBounds(0, 0, drawable.getMinimumWidth(), drawable.getMinimumHeight());
+            mBtnJoinCollection.setBackgroundDrawable(ContextCompat.getDrawable(this, R.drawable.btn_join_collection_pressed));
+            mBtnJoinCollection.setCompoundDrawables(drawable, null, null, null);
+            mBtnJoinCollection.postInvalidate();
+            isJoinedCollections = true;
+        }
     }
 
     @OnClick(R.id.btnRead)
     public void onClickRead() {
-        startActivity(new Intent(this, BookReadActivity.class)
-                .putExtra("bookId", bookId));
+        ReadActivity.startActivity(this, recommendBooks);
     }
 
     @OnClick(R.id.tvBookListAuthor)
@@ -324,5 +360,11 @@ public class BookDetailActivity extends BaseActivity implements BookDetailContra
     @Override
     public void complete() {
 
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        EventBus.getDefault().unregister(this);
     }
 }

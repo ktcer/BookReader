@@ -1,6 +1,8 @@
 package com.justwayward.reader.ui.adapter;
 
 import android.content.Context;
+import android.support.v4.content.ContextCompat;
+import android.widget.TextView;
 
 import com.justwayward.reader.R;
 import com.justwayward.reader.bean.BookToc;
@@ -15,13 +17,28 @@ import java.util.List;
  */
 public class TocListAdapter extends EasyLVAdapter<BookToc.mixToc.Chapters> {
 
-    public TocListAdapter(Context context, List<BookToc.mixToc.Chapters> list) {
+    private int currentChapter;
+
+    public TocListAdapter(Context context, List<BookToc.mixToc.Chapters> list, int currentChapter) {
         super(context, list, R.layout.item_book_read_toc_list);
+        this.currentChapter = currentChapter;
     }
 
     @Override
     public void convert(EasyLVHolder holder, int position, BookToc.mixToc.Chapters chapters) {
-        holder.setText(R.id.tvTocItem, chapters.title);
+        TextView tvTocItem = holder.getView(R.id.tvTocItem);
+        tvTocItem.setText(chapters.title);
+        if (currentChapter == position + 1) {
+            tvTocItem.setSelected(true);
+            tvTocItem.setTextColor(ContextCompat.getColor(mContext, R.color.light_red));
+        } else {
+            tvTocItem.setSelected(false);
+            tvTocItem.setTextColor(ContextCompat.getColor(mContext, R.color.light_black));
+        }
     }
 
+    public void setCurrentChapter(int chapter) {
+        currentChapter = chapter;
+        notifyDataSetChanged();
+    }
 }

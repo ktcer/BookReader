@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.os.Environment;
 
+import com.justwayward.reader.base.Constant;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -23,7 +25,20 @@ import java.text.DecimalFormat;
  */
 public class FileUtils {
 
-    private static final String TAG = FileUtils.class.getSimpleName();
+    public static String getChapterPath(String bookId, int chapter) {
+        return Constant.BASE_PATH + bookId + File.separator + chapter + ".txt";
+    }
+
+    public static File getChapterFile(String bookId, int chapter) {
+        File file = new File(getChapterPath(bookId, chapter));
+        if (!file.exists())
+            createFile(file);
+        return file;
+    }
+
+    public static File getBookDir(String bookId) {
+        return new File(Constant.BASE_PATH + bookId);
+    }
 
     /**
      * 创建根缓存目录
@@ -93,7 +108,7 @@ public class FileUtils {
         return "";
     }
 
-    public static String getImageCachePath(String path){
+    public static String getImageCachePath(String path) {
         return createDir(path);
     }
 
@@ -124,6 +139,7 @@ public class FileUtils {
      * @param content  内容
      */
     public static void writeFile(String filePath, String content, boolean isAppend) {
+        LogUtils.i("save:" + filePath);
         try {
             FileOutputStream fout = new FileOutputStream(filePath, isAppend);
             byte[] bytes = content.getBytes();
@@ -224,7 +240,7 @@ public class FileUtils {
      * @return
      */
     public static String formatFileSizeToString(long fileLen) {
-        DecimalFormat df = new DecimalFormat("#.00");
+        DecimalFormat df = new DecimalFormat("0.00");
         String fileSizeString = "";
         if (fileLen < 1024) {
             fileSizeString = df.format((double) fileLen) + "B";
@@ -277,6 +293,31 @@ public class FileUtils {
             e.printStackTrace();
         }
         return false;
+    }
+
+    /**
+     * 获取文件夹大小
+     *
+     * @return
+     * @throws Exception
+     */
+    public static long getFolderSize(String dir) throws Exception {
+        File file = new File(dir);
+        long size = 0;
+        try {
+            File[] fileList = file.listFiles();
+            for (int i = 0; i < fileList.length; i++) {
+                // 如果下面还有文件
+                if (fileList[i].isDirectory()) {
+                    size = size + getFolderSize(fileList[i].getAbsolutePath());
+                } else {
+                    size = size + fileList[i].length();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return size;
     }
 
     /***

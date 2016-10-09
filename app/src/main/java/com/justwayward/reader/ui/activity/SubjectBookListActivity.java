@@ -24,6 +24,7 @@ import com.justwayward.reader.ui.adapter.SubjectTagsAdapter;
 import com.justwayward.reader.ui.contract.SubjectBookListContract;
 import com.justwayward.reader.ui.fragment.SubjectFragment;
 import com.justwayward.reader.ui.presenter.SubjectBookListPresenter;
+import com.justwayward.reader.utils.ToastUtils;
 import com.justwayward.reader.view.RVPIndicator;
 import com.justwayward.reader.view.ReboundScrollView;
 import com.justwayward.reader.view.SupportDividerItemDecoration;
@@ -81,7 +82,7 @@ public class SubjectBookListActivity extends BaseActivity implements SubjectBook
 
     @Override
     public void initToolBar() {
-        mCommonToolbar.setTitle("主题书单");
+        mCommonToolbar.setTitle(R.string.subject_book_list);
         mCommonToolbar.setNavigationIcon(R.drawable.ab_back);
     }
 
@@ -139,15 +140,15 @@ public class SubjectBookListActivity extends BaseActivity implements SubjectBook
                 showTagGroup();
             }
             return true;
-        } else if (item.getItemId() == R.id.menu_more) {
-            return true;
+        } else if (item.getItemId() == R.id.menu_my_book_list) {
+            startActivity(new Intent(this, MyBookListActivity.class));
         }
         return super.onOptionsItemSelected(item);
     }
 
     @Override
     public void onBackPressed() {
-        if(isVisible(rsvTags)){
+        if (isVisible(rsvTags)) {
             hideTagGroup();
         } else {
             super.onBackPressed();
@@ -178,6 +179,10 @@ public class SubjectBookListActivity extends BaseActivity implements SubjectBook
     }
 
     private void showTagGroup() {
+        if (mTagList.isEmpty()) {
+            ToastUtils.showToast(getString(R.string.network_error_tips));
+            return;
+        }
         Animation mShowAction = new TranslateAnimation(Animation.RELATIVE_TO_SELF, 0.0f,
                 Animation.RELATIVE_TO_SELF, 0.0f,
                 Animation.RELATIVE_TO_SELF, -1.0f,

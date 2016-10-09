@@ -2,7 +2,6 @@ package com.justwayward.reader.view.ReadView;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
@@ -16,10 +15,11 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Scroller;
 
-import com.justwayward.reader.R;
 import com.justwayward.reader.bean.BookToc;
+import com.justwayward.reader.manager.SettingManager;
+import com.justwayward.reader.manager.ThemeManager;
+import com.justwayward.reader.utils.LogUtils;
 import com.justwayward.reader.utils.ScreenUtils;
-import com.justwayward.reader.utils.SharedPreferencesUtil;
 import com.justwayward.reader.utils.ToastUtils;
 
 import java.util.List;
@@ -78,11 +78,14 @@ public class PageWidget extends View {
     private float actiondownX, actiondownY;
 
     private OnReadStateChangeListener listener;
+    private String bookId;
+    public boolean isPrepared = false;
 
-    public PageWidget(Context context, String bookId, int chapter, List<BookToc.mixToc.Chapters> chaptersList,
+    public PageWidget(Context context, String bookId, List<BookToc.mixToc.Chapters> chaptersList,
                       OnReadStateChangeListener listener) {
         super(context);
         this.listener = listener;
+        this.bookId = bookId;
         mPath0 = new Path();
         mPath1 = new Path();
         mScreenWidth = ScreenUtils.getScreenWidth();
@@ -107,18 +110,28 @@ public class PageWidget extends View {
         mNextPageBitmap = Bitmap.createBitmap(mScreenWidth, mScreenHeight, Bitmap.Config.ARGB_8888);
         mCurrentPageCanvas = new Canvas(mCurPageBitmap);
         mNextPageCanvas = new Canvas(mNextPageBitmap);
-        pagefactory = new PageFactory(bookId, chapter, chaptersList);
-        pagefactory.setOnReadStateChangeListener(listener);
-        try {
-            pagefactory.setBgBitmap(BitmapFactory.decodeResource(context.getResources(),
-                    R.drawable.reader_background_brown_big_img));
-            // 获取上次阅读章节及位置
-            int lastChapter = SharedPreferencesUtil.getInstance().getInt(bookId + "-chapter", 1);
-            int startPos = SharedPreferencesUtil.getInstance().getInt(bookId + "-startPos", 0);
-            int endPos = SharedPreferencesUtil.getInstance().getInt(bookId + "-endPos", 0);
-            pagefactory.openBook(lastChapter, new int[]{startPos, endPos});
-            pagefactory.onDraw(mCurrentPageCanvas);
-        } catch (Exception e) {
+        pagefactory = new PageFactory(getContext(), bookId, chaptersList);
+    }
+
+    public synchronized void init(int theme) {
+        if (!isPrepared) {
+
+            pagefactory.setOnReadStateChangeListener(listener);
+            try {
+                pagefactory.setBgBitmap(ThemeManager.getThemeDrawable(theme));
+                // 自动跳转到上次阅读位置
+                int pos[] = SettingManager.getInstance().getReadProgress(bookId);
+                int ret = pagefactory.openBook(pos[0], new int[]{pos[1], pos[2]});
+                LogUtils.i("上次阅读位置：chapter=" + pos[0] + " startPos=" + pos[1] + " endPos=" + pos[2]);
+                if (ret == 0) {
+                    listener.onLoadChapterFailure(pos[0]);
+                    return;
+                }
+                pagefactory.onDraw(mCurrentPageCanvas);
+                postInvalidate();
+            } catch (Exception e) {
+            }
+            isPrepared = true;
         }
     }
 
@@ -321,7 +334,7 @@ public class PageWidget extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        canvas.drawColor(0xFFAAAAAA);
+        //canvas.drawColor(0xFFAAAAAA);
         calcPoints();
         drawCurrentPageArea(canvas, mCurPageBitmap, mPath0);
         drawNextPageAreaAndShadow(canvas, mNextPageBitmap);
@@ -598,17 +611,16 @@ public class PageWidget extends View {
     @Override
     public boolean onTouchEvent(MotionEvent e) {
         if (e.getAction() == MotionEvent.ACTION_DOWN) {
-            abortAnimation();
-            calcCornerXY(e.getX(), e.getY());
-            pagefactory.onDraw(mCurrentPageCanvas);
             int x = (int) e.getX();
             int y = (int) e.getY();
-            //Action_Down时在中间位置显示菜单
-            if (x > mScreenWidth / 3 && x < mScreenWidth * 2 / 3
-                    && y > mScreenHeight / 3 && y < mScreenHeight * 2 / 3) {
+            if (x >= mScreenWidth / 3 && x <= mScreenWidth * 2 / 3
+                    && y >= mScreenHeight / 3 && y <= mScreenHeight * 2 / 3) {
                 listener.onCenterClick();
                 return false;//停止向下分发事件
             }
+            abortAnimation();
+            calcCornerXY(e.getX(), e.getY());
+            pagefactory.onDraw(mCurrentPageCanvas);
             if (x < mScreenWidth / 2) {// 从左翻
                 if (!pagefactory.prePage()) {
                     ToastUtils.showSingleToast("没有上一页啦");
@@ -622,6 +634,7 @@ public class PageWidget extends View {
                 }
                 pagefactory.onDraw(mNextPageCanvas);
             }
+            listener.onFlip();
             setBitmaps(mCurPageBitmap, mNextPageBitmap);
         }
         boolean ret = doTouchEvent(e);
@@ -631,9 +644,80 @@ public class PageWidget extends View {
     public void jumpToChapter(int chapter) {
         abortAnimation();
         pagefactory.openBook(chapter, new int[]{0, 0});
+        pagefactory.onDraw(mCurrentPageCanvas);
         pagefactory.onDraw(mNextPageCanvas);
-        startAnimation(1000);
         postInvalidate();
+    }
 
+    public void nextPage() {
+        if (!pagefactory.nextPage()) {
+            ToastUtils.showSingleToast("没有下一页啦");
+            return;
+        }
+        if (isPrepared) {
+            pagefactory.onDraw(mCurrentPageCanvas);
+            pagefactory.onDraw(mNextPageCanvas);
+            postInvalidate();
+        }
+    }
+
+    public void prePage() {
+        if (!pagefactory.prePage()) {
+            ToastUtils.showSingleToast("没有上一页啦");
+            return;
+        }
+        if (isPrepared) {
+            pagefactory.onDraw(mCurrentPageCanvas);
+            pagefactory.onDraw(mNextPageCanvas);
+            postInvalidate();
+        }
+    }
+
+    public synchronized void setFontSize(final int fontSizePx) {
+        pagefactory.setTextFont(fontSizePx);
+        if (isPrepared) {
+            abortAnimation();
+            pagefactory.onDraw(mCurrentPageCanvas);
+            pagefactory.onDraw(mNextPageCanvas);
+            SettingManager.getInstance().saveFontSize(bookId, fontSizePx);
+            postInvalidate();
+        }
+    }
+
+    public synchronized void setTextColor(int textColor,int titleColor) {
+        pagefactory.setTextColor(textColor,titleColor);
+        if (isPrepared) {
+            abortAnimation();
+            pagefactory.onDraw(mCurrentPageCanvas);
+            pagefactory.onDraw(mNextPageCanvas);
+            postInvalidate();
+        }
+    }
+
+    public synchronized void setTheme(int theme) {
+        Bitmap bg = ThemeManager.getThemeDrawable(theme);
+        if (bg != null) {
+            pagefactory.setBgBitmap(bg);
+            if (isPrepared) {
+                pagefactory.onDraw(mCurrentPageCanvas);
+                pagefactory.onDraw(mNextPageCanvas);
+                postInvalidate();
+            }
+        }
+        if (theme < 5) {
+            SettingManager.getInstance().saveReadTheme(theme);
+        }
+    }
+
+    public void setBattery(int battery) {
+        pagefactory.setBattery(battery);
+        if (isPrepared) {
+            pagefactory.onDraw(mCurrentPageCanvas);
+            postInvalidate();
+        }
+    }
+
+    public void setTime(String time) {
+        pagefactory.setTime(time);
     }
 }

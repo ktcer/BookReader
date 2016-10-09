@@ -9,9 +9,8 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/menu_more"
-        android:icon="@drawable/abc_ic_menu_moreoverflow_mtrl_alpha"
+        android:id="@+id/menu_my_book_list"
         android:orderInCategory="80"
-        android:title=""
+        android:title="我的书单"
         app:showAsAction="always" />
 </menu>

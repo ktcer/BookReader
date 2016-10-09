@@ -24,12 +24,12 @@ import com.justwayward.reader.base.BaseRVActivity;
 import com.justwayward.reader.bean.SearchDetail;
 import com.justwayward.reader.component.AppComponent;
 import com.justwayward.reader.component.DaggerBookComponent;
+import com.justwayward.reader.manager.CacheManager;
 import com.justwayward.reader.ui.adapter.AutoCompleteAdapter;
 import com.justwayward.reader.ui.adapter.SearchHistoryAdapter;
 import com.justwayward.reader.ui.contract.SearchContract;
 import com.justwayward.reader.ui.easyadapter.SearchAdapter;
 import com.justwayward.reader.ui.presenter.SearchPresenter;
-import com.justwayward.reader.utils.SharedPreferencesUtil;
 import com.justwayward.reader.view.TagColor;
 import com.justwayward.reader.view.TagGroup;
 
@@ -80,7 +80,6 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
 
     private SearchHistoryAdapter mHisAdapter;
     private List<String> mHisList = new ArrayList<>();
-
     private String key;
     private MenuItem searchMenuItem;
     private SearchView searchView;
@@ -112,6 +111,12 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
 
         mHisAdapter = new SearchHistoryAdapter(this, mHisList);
         lvSearchHistory.setAdapter(mHisAdapter);
+        lvSearchHistory.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                search(mHisList.get(position));
+            }
+        });
         initSearchHistory();
     }
 
@@ -119,21 +124,7 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
     public void configViews() {
         initAdapter(SearchAdapter.class, false, false);
 
-        mAutoAdapter = new AutoCompleteAdapter(this, mAutoList);
-        mListPopupWindow = new ListPopupWindow(this);
-        mListPopupWindow.setAdapter(mAutoAdapter);
-        mListPopupWindow.setWidth(ViewGroup.LayoutParams.MATCH_PARENT);
-        mListPopupWindow.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mListPopupWindow.setAnchorView(mCommonToolbar);
-        mListPopupWindow.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                mListPopupWindow.dismiss();
-                TextView tv = (TextView) view.findViewById(R.id.tvAutoCompleteItem);
-                String str = tv.getText().toString();
-                search(str);
-            }
-        });
+        initAutoList();
 
         mTagGroup.setOnTagClickListener(new TagGroup.OnTagClickListener() {
             @Override
@@ -153,8 +144,27 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
         mPresenter.getHotWordList();
     }
 
+    private void initAutoList() {
+        mAutoAdapter = new AutoCompleteAdapter(this, mAutoList);
+        mListPopupWindow = new ListPopupWindow(this);
+        mListPopupWindow.setAdapter(mAutoAdapter);
+        mListPopupWindow.setWidth(ViewGroup.LayoutParams.MATCH_PARENT);
+        mListPopupWindow.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mListPopupWindow.setAnchorView(mCommonToolbar);
+        mListPopupWindow.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                mListPopupWindow.dismiss();
+                TextView tv = (TextView) view.findViewById(R.id.tvAutoCompleteItem);
+                String str = tv.getText().toString();
+                search(str);
+            }
+        });
+    }
+
     @Override
     public synchronized void showHotWordList(List<String> list) {
+        visible(mTvChangeWords);
         tagList.clear();
         tagList.addAll(list);
         times = 0;
@@ -258,7 +268,7 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
      * @param query
      */
     private void saveSearchHistory(String query) {
-        List<String> list = SharedPreferencesUtil.getInstance().getObject("searchHistory", List.class);
+        List<String> list = CacheManager.getInstance().getSearchHistory();
         if (list == null) {
             list = new ArrayList<>();
             list.add(query);
@@ -278,12 +288,12 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
                 list.remove(i);
             }
         }
-        SharedPreferencesUtil.getInstance().putObject("searchHistory", list);
+        CacheManager.getInstance().saveSearchHistory(list);
         initSearchHistory();
     }
 
     private void initSearchHistory() {
-        List<String> list = SharedPreferencesUtil.getInstance().getObject("searchHistory", List.class);
+        List<String> list = CacheManager.getInstance().getSearchHistory();
         mHisAdapter.clear();
         if (list != null && list.size() > 0) {
             tvClear.setEnabled(true);
@@ -300,20 +310,11 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
      * @param key
      */
     private void search(String key) {
+        MenuItemCompat.expandActionView(searchMenuItem);
         if (!TextUtils.isEmpty(key)) {
-            MenuItemCompat.expandActionView(searchMenuItem);
             searchView.setQuery(key, true);
             saveSearchHistory(key);
         }
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_search) {
-            //initSearchResult();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private void initSearchResult() {
@@ -338,7 +339,7 @@ public class SearchActivity extends BaseRVActivity<SearchDetail.SearchBooks> imp
 
     @OnClick(R.id.tvClear)
     public void clearSearchHistory() {
-        SharedPreferencesUtil.getInstance().putObject("searchHistory", null);
+        CacheManager.getInstance().saveSearchHistory(null);
         initSearchHistory();
     }
 

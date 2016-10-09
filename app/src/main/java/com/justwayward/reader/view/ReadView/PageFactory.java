@@ -1,18 +1,23 @@
 package com.justwayward.reader.view.ReadView;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.support.v4.content.ContextCompat;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.ProgressBar;
 
 import com.justwayward.reader.R;
 import com.justwayward.reader.bean.BookToc;
+import com.justwayward.reader.manager.SettingManager;
 import com.justwayward.reader.utils.AppUtils;
 import com.justwayward.reader.utils.FileUtils;
+import com.justwayward.reader.utils.LogUtils;
 import com.justwayward.reader.utils.ScreenUtils;
-import com.justwayward.reader.utils.SharedPreferencesUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,7 +26,8 @@ import java.io.UnsupportedEncodingException;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.text.DecimalFormat;
-import java.util.GregorianCalendar;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Vector;
 
@@ -68,54 +74,66 @@ public class PageFactory {
     private Bitmap m_book_bg;
     private Vector<String> m_lines = new Vector<>();
 
-    private String basePath = FileUtils.createRootPath(AppUtils.getAppContext()) + "/book/";
     private String bookId;
     private int currentChapter;
     private List<BookToc.mixToc.Chapters> chaptersList;
     private int chapterSize = 0;
     private int currentPage = 1;
 
+    private DecimalFormat decimalFormat = new DecimalFormat("#0.00");
+    private SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm");
+    private int timeLen = 0;
+    private int percentLen = 0;
+    private String time;
+    private int battery = 40;
+    private Rect rectF;
+    private ProgressBar batteryView;
+    private Bitmap batteryBitmap;
+
     private OnReadStateChangeListener listener;
 
-    public PageFactory(String bookId, int chapter, List<BookToc.mixToc.Chapters> chaptersList) {
-        this(ScreenUtils.getScreenWidth(), ScreenUtils.getScreenHeight(), ScreenUtils.dpToPxInt(18),
-                bookId, chapter, chaptersList);
+    public PageFactory(Context context, String bookId, List<BookToc.mixToc.Chapters> chaptersList) {
+        this(context, ScreenUtils.getScreenWidth(), ScreenUtils.getScreenHeight(),
+                SettingManager.getInstance().getReadFontSize(bookId),
+                bookId, chaptersList);
     }
 
-    public PageFactory(int width, int height, int fontSize, String bookId, int chapter,
+    public PageFactory(Context context, int width, int height, int fontSize, String bookId,
                        List<BookToc.mixToc.Chapters> chaptersList) {
         mWidth = width;
         mHeight = height;
         mFontSize = fontSize;
-        mNumFontSize = fontSize;
+        mLineSpace = mFontSize / 5 * 2;
+        mNumFontSize = ScreenUtils.dpToPxInt(16);
         marginWidth = ScreenUtils.dpToPxInt(15);
         marginHeight = ScreenUtils.dpToPxInt(15);
-        mVisibleHeight = mHeight - marginHeight * 2 - mFontSize * 3;
+        mVisibleHeight = mHeight - marginHeight * 2 - mNumFontSize * 2 - mLineSpace * 2;
         mVisibleWidth = mWidth - marginWidth * 2;
-        mLineSpace = mFontSize / 3;
         mPageLineCount = mVisibleHeight / (mFontSize + mLineSpace);
+        rectF = new Rect(0, 0, mWidth, mHeight);
 
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         mPaint.setTextSize(mFontSize);
+        mPaint.setTextSize(ContextCompat.getColor(context, R.color.chapter_content_day));
         mPaint.setColor(Color.BLACK);
         mTitlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         mTitlePaint.setTextSize(mNumFontSize);
-        mTitlePaint.setColor(ContextCompat.getColor(AppUtils.getAppContext(), R.color.light_coffee));
+        mTitlePaint.setColor(ContextCompat.getColor(AppUtils.getAppContext(), R.color.chapter_title_day));
+        timeLen = (int) mTitlePaint.measureText("00:00");
+        percentLen = (int) mTitlePaint.measureText("00.00%");
         // Typeface typeface = Typeface.createFromAsset(context.getAssets(),"fonts/FZBYSK.TTF");
         // mPaint.setTypeface(typeface);
         // mNumPaint.setTypeface(typeface);
 
         this.bookId = bookId;
-        this.currentChapter = chapter;
         this.chaptersList = chaptersList;
-        chapterSize = chaptersList.size();
+
+        time = dateFormat.format(new Date());
+        batteryView = (ProgressBar) LayoutInflater.from(context).inflate(R.layout.layout_battery_progress, null);
     }
 
     public File getBookFile(int chapter) {
-        File file = new File(basePath + bookId + "/" + chapter + ".txt");
-        if (!file.exists())
-            FileUtils.createFile(file);
-        return file;
+        return FileUtils.getChapterFile(bookId, chapter);
     }
 
     public void openBook() {
@@ -135,6 +153,9 @@ public class PageFactory {
      */
     public int openBook(int chapter, int[] position) {
         this.currentChapter = chapter;
+        this.chapterSize = chaptersList.size();
+        if (currentChapter > chapterSize)
+            currentChapter = chapterSize;
         String path = getBookFile(currentChapter).getPath();
         try {
             File file = new File(path);
@@ -163,7 +184,7 @@ public class PageFactory {
      *
      * @param canvas
      */
-    public void onDraw(Canvas canvas) {
+    public synchronized void onDraw(Canvas canvas) {
         if (m_lines.size() == 0) {
             m_mbBufEndPos = m_mbBufBeginPos;
             m_lines = pageDown();
@@ -172,17 +193,16 @@ public class PageFactory {
             int y = marginHeight + (mLineSpace << 1);
             // 绘制背景
             if (m_book_bg != null) {
-                Rect rectF = new Rect(0, 0, mWidth, mHeight);
                 canvas.drawBitmap(m_book_bg, null, rectF, null);
             } else {
                 canvas.drawColor(Color.WHITE);
             }
             // 绘制标题
             canvas.drawText(chaptersList.get(currentChapter - 1).title, marginWidth, y, mTitlePaint);
-            y += mLineSpace << 1;
+            y += mLineSpace + mNumFontSize;
             // 绘制阅读页面文字
             for (String line : m_lines) {
-                y += mFontSize + mLineSpace;
+                y += mLineSpace;
                 if (line.endsWith("@")) {
                     canvas.drawText(line.substring(0, line.length() - 1), marginWidth, y, mPaint);
                     y += mLineSpace;
@@ -190,15 +210,23 @@ public class PageFactory {
                 } else {
                     canvas.drawText(line, marginWidth, y, mPaint);
                 }
+                y += mFontSize;
             }
             // 绘制提示内容
+            if (batteryBitmap != null) {
+                canvas.drawBitmap(batteryBitmap, marginWidth + 2,
+                        mHeight - marginHeight - ScreenUtils.dpToPxInt(12), mTitlePaint);
+            }
+
             float percent = (float) currentChapter * 100 / chapterSize;
-            DecimalFormat format = new DecimalFormat("#0.00");
-            canvas.drawText(format.format(percent) + "%", marginWidth + 2, mHeight - marginHeight, mTitlePaint);
-            GregorianCalendar calendar = new GregorianCalendar();
-            String mTime = calendar.HOUR_OF_DAY + ":" + calendar.MINUTE;
-            int strLen = (int) mTitlePaint.measureText(mTime);
-            canvas.drawText(mTime, mWidth - marginWidth - strLen, mHeight - marginHeight, mTitlePaint);
+            canvas.drawText(decimalFormat.format(percent) + "%", (mWidth - percentLen) / 2,
+                    mHeight - marginHeight, mTitlePaint);
+
+            String mTime = dateFormat.format(new Date());
+            canvas.drawText(mTime, mWidth - marginWidth - timeLen, mHeight - marginHeight, mTitlePaint);
+
+            // 保存阅读进度
+            SettingManager.getInstance().saveReadProgress(bookId, currentChapter, m_mbBufBeginPos, m_mbBufEndPos);
         }
     }
 
@@ -284,9 +312,6 @@ public class PageFactory {
             paraSpace += mLineSpace;
             mPageLineCount = (mVisibleHeight - paraSpace) / (mFontSize + mLineSpace);
         }
-        SharedPreferencesUtil.getInstance().putInt(bookId + "-chapter", currentChapter);
-        SharedPreferencesUtil.getInstance().putInt(bookId + "-startPos", m_mbBufBeginPos);
-        SharedPreferencesUtil.getInstance().putInt(bookId + "-endPos", m_mbBufEndPos);
         return lines;
     }
 
@@ -339,9 +364,7 @@ public class PageFactory {
             }
             currentPage++;
         }
-        SharedPreferencesUtil.getInstance().putInt(bookId + "-chapter", currentChapter);
-        SharedPreferencesUtil.getInstance().putInt(bookId + "-startPos", m_mbBufBeginPos);
-        SharedPreferencesUtil.getInstance().putInt(bookId + "-endPos", m_mbBufEndPos);
+        SettingManager.getInstance().saveReadProgress(bookId, currentChapter, m_mbBufBeginPos, m_mbBufEndPos);
         return lines;
     }
 
@@ -471,11 +494,24 @@ public class PageFactory {
      * @param fontsize 单位：px
      */
     public void setTextFont(int fontsize) {
+        LogUtils.i("fontSize=" + fontsize);
         mFontSize = fontsize;
+        mLineSpace = mFontSize / 5 * 2;
         mPaint.setTextSize(mFontSize);
         mPageLineCount = mVisibleHeight / (mFontSize + mLineSpace);
         m_mbBufEndPos = m_mbBufBeginPos;
         nextPage();
+    }
+
+    /**
+     * 设置字体颜色
+     *
+     * @param textColor
+     * @param titleColor
+     */
+    public void setTextColor(int textColor, int titleColor) {
+        mPaint.setColor(textColor);
+        mTitlePaint.setColor(titleColor);
     }
 
     public int getTextFont() {
@@ -520,5 +556,24 @@ public class PageFactory {
     void onLoadChapterFailure(int chapter) {
         if (listener != null)
             listener.onLoadChapterFailure(chapter);
+    }
+
+    public Bitmap convertBetteryBitmap() {
+        batteryView.setProgress(battery);
+        batteryView.setDrawingCacheEnabled(true);
+        batteryView.measure(View.MeasureSpec.makeMeasureSpec(ScreenUtils.dpToPxInt(26), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(ScreenUtils.dpToPxInt(14), View.MeasureSpec.EXACTLY));
+        batteryView.layout(0, 0, batteryView.getMeasuredWidth(), batteryView.getMeasuredHeight());
+        batteryView.buildDrawingCache();
+        return batteryView.getDrawingCache();
+    }
+
+    public void setBattery(int battery) {
+        this.battery = battery;
+        batteryBitmap = convertBetteryBitmap();
+    }
+
+    public void setTime(String time) {
+        this.time = time;
     }
 }

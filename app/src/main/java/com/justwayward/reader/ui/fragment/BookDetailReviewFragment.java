@@ -74,7 +74,8 @@ public class BookDetailReviewFragment extends BaseRVFragment<BookDetailReviewPre
             mAdapter.clear();
         }
         mAdapter.addAll(list);
-        start = start + list.size();
+        if(list != null)
+            start = start + list.size();
     }
 
     @Override
@@ -116,7 +117,6 @@ public class BookDetailReviewFragment extends BaseRVFragment<BookDetailReviewPre
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        mPresenter.detachView();
         EventBus.getDefault().unregister(this);
     }
 }
